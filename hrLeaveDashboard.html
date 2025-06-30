@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR Leave Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+
+    .header-banner {
+      background-color: #2c3e50;
+      color: white;
+      padding: 25px 0;
+      text-align: center;
+      font-size: 32px;
+      font-weight: bold;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .dashboard-card {
+      max-width: 1000px;
+      margin: auto;
+      margin-top: 40px;
+      padding: 20px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .cards {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px auto;
+      padding: 30px;
+      max-width: 1000px;
+    }
+
+    .filter-section {
+      max-width: 1000px;
+      margin: 20px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-section input,
+    .filter-section select {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid #000;
+      margin-top: 10px;
+    }
+    
+  </style>
+</head>
+
+<body>
+  <div class="container mt-4">
+    <h2 class="header-banner">HR Leave Dashboard</h2>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+      <input type="text" id="searchInput" placeholder="Search by employee name..." style="width: 350px;" />
+      <div>
+        <label><strong>Filter:</strong></label>
+        <select id="statusFilter" style="margin-right: 30px;">
+          <option value="">All</option>
+          <option value="Pending">Pending</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+        <button class="btn btn-danger" onclick="clearAll()">Clear All Records</button>
+      </div>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="cards mt-4">
+      <div class="card text-center" style="width: 200px;">
+        <h5 class="m-2">Total Employee</h5>
+        <p id="totalCount">0</p>
+      </div>
+      <div class="card text-center" style="width: 200px;">
+        <h5 class="mt-2">Rejected</h5>
+        <p id="rejectedCount">0</p>
+      </div>
+      <div class="card text-center" style="width: 200px;">
+        <h5 class="mt-2">Approved</h5>
+        <p id="approvedCount">0</p>
+      </div>
+      <div class="card text-center" style="width: 200px;">
+        <h5 class="mt-2">Pending</h5>
+        <p id="pendingCount">0</p>
+      </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="dashboard-card">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="employeeTable">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Employee Id</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="employeeTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Details Modal -->
+  <div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Employee Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body "  id="modalBodyContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API_URL = 'http://localhost:8080/api/leaves';
+
+  let leaveArray = [];
+
+  async function loadData() {
+    try {
+      const resp = await fetch(API_URL);
+      if (!resp.ok) throw new Error(`Server ${resp.status}`);
+      leaveArray = await resp.json();
+    } catch (err) {
+      console.error("Load error:", err);
+      alert("Could not load leave records from server.");
+      leaveArray = [];
+    }
+  }
+
+  function filteredData() {
+    const searchVal = document.getElementById("searchInput").value.toLowerCase();
+    const statusVal = document.getElementById("statusFilter").value;
+    return leaveArray.filter(emp => {
+      const nameMatch = emp.empName?.toLowerCase().includes(searchVal);
+      const statusMatch = !statusVal || emp.status === statusVal;
+      return nameMatch && statusMatch;
+    });
+  }
+
+  function renderTable(data) {
+    const body = document.getElementById("employeeTableBody");
+    body.innerHTML = "";
+
+    let approved = 0, rejected = 0, pending = 0;
+    data.forEach((emp,index) => {
+      if (emp.status === "Approved") approved++;
+      else if (emp.status === "Rejected") rejected++;
+      else pending++;
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${emp.empName}</td>
+        <td>${emp.empId}</td>
+        <td>
+          <select class="form-select form-select-sm" onchange="changeStatus('${emp.empId}', this.value)" ${emp.status == "Pending" || emp.status == "PENDING" ? "" : "disabled"}>
+            <option value="Pending" ${emp.status==="Pending"?"selected":""}>Pending</option>
+            <option value="Approved" ${emp.status==="Approved"?"selected":""}>Approved</option>
+            <option value="Rejected" ${emp.status==="Rejected"?"selected":""}>Rejected</option>
+          </select>
+        </td>
+        <td><button class="btn btn-primary btn-sm" onclick="viewDetails(${index})">View</button></td>
+      `;
+      body.appendChild(row);
+    });
+
+    document.getElementById("totalCount").textContent = leaveArray.length;
+    document.getElementById("approvedCount").textContent = approved;
+    document.getElementById("pendingCount").textContent = pending;
+    document.getElementById("rejectedCount").textContent = rejected;
+  }
+
+  async function changeStatus(empId, newStatus) {
+    try {
+      const resp = await fetch(`${API_URL}/${empId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!resp.ok) throw new Error(`Server ${resp.status}`);
+      await loadData();
+      renderTable(filteredData());
+    } catch (err) {
+      console.error("Update status error:", err);
+      alert("Failed to update status");
+    }
+  }
+
+ async function clearAll() {
+  if (!confirm("Are you sure to delete all records?")) return;
+
+  try {
+    const resp = await fetch(API_URL, { method: 'DELETE' });
+    if (!resp.ok) throw new Error(`Server responded with ${resp.status}`);
+    await loadData();
+    renderTable(filteredData());
+    alert("All records deleted.");
+  } catch (err) {
+    console.error("Deletion error:", err);
+    alert("Failed to delete all records.");
+  }
+}
+
+  function viewDetails(index) {
+    const emp = filteredData()[index];
+    document.getElementById("modalBodyContent").innerHTML = `
+      <p><strong>Name:</strong> ${emp.empName}</p>
+      <p><strong>Employee ID:</strong> ${emp.empId}</p>
+      <p><strong>Leave Type:</strong> ${emp.leaveType}</p>
+      <p><strong>Start Date:</strong> ${emp.startDate}</p>
+      <p><strong>End Date:</strong> ${emp.endDate}</p>
+      <p><strong>Reason:</strong> ${emp.reason}</p>
+      <p><strong>Status:</strong> ${emp.status}</p>
+    `;
+    new bootstrap.Modal(document.getElementById("detailsModal")).show();
+  }
+
+  // Event listeners
+  document.getElementById("searchInput").addEventListener("input", () => renderTable(filteredData()));
+  document.getElementById("statusFilter").addEventListener("change", () => renderTable(filteredData()));
+
+  // Initial load
+  loadData().then(() => renderTable(filteredData()));
+</script>
+
+</body>
+</html>
